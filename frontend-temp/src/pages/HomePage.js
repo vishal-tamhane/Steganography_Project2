@@ -33,20 +33,59 @@ const HomePage = () => {
         </div>
 
         {/* How to Use Section */}
-        <section className="how-to-use-section">
-          <h2>How to Use</h2>
-          <ol className="how-to-list">
-            <li>
-              <strong>1. Encode:</strong> Click <a href="/encode">Get Started</a>, upload your image, type your secret message, and download the encoded image.
-            </li>
-            <li>
-              <strong>2. Share:</strong> Send the encoded image to your recipient via email, chat, or any platform.
-            </li>
-            <li>
-              <strong>3. Decode:</strong> The recipient uploads the image on the <a href="/decode">Decode</a> page to reveal the hidden message.
-            </li>
-          </ol>
-        </section>
+        <section className="how-to-use-notebook">
+  <h2>How to Use</h2>
+  <div className="how-to-steps-wrapper">
+    <div className="how-to-step">
+      <div className="how-to-img">
+        {/* Replace with your own image if desired */}
+        <svg width="60" height="60" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="12" fill="#00bcd4" />
+          <path d="M8 12l2 2 4-4" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+      <div className="how-to-desc">
+        <strong>Encode</strong>
+        <p>Upload your image, type your secret message, and download the encoded image.</p>
+      </div>
+    </div>
+    <div className="how-to-step">
+      <div className="how-to-img">
+        <svg width="60" height="60" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="12" fill="#3949ab" />
+          <path d="M16 8l-8 8M8 8h8v8" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+      <div className="how-to-desc">
+        <strong>Share</strong>
+        <p>Send the encoded image to your recipient via email, chat, or any platform.</p>
+      </div>
+    </div>
+    <div className="how-to-step">
+      <div className="how-to-img">
+        <svg width="60" height="60" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="12" fill="#1a237e" />
+          <path d="M8 12l2 2 4-4" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+      <div className="how-to-desc">
+        <strong>Decode</strong>
+        <p>Recipient uploads the image to reveal the hidden message.</p>
+      </div>
+    </div>
+    {/* Dotted curved line */}
+    <svg className="how-to-dotted-line" viewBox="0 0 600 120" width="100%" height="120">
+      <path
+        d="M 60 60 Q 300 0 540 60"
+        fill="none"
+        stroke="#00bcd4"
+        strokeWidth="3"
+        strokeDasharray="6, 10"
+      />
+    </svg>
+  </div>
+</section>
+
 
         {/* Why Steganography Section */}
         <section className="why-steg-section">

@@ -27,14 +27,15 @@ const Footer = () => {
         <div className="footer-section">
           <h3>Contact</h3>
           <ul className="footer-contact-list">
+          <li>
+              <FaPhoneAlt className="footer-icon" />
+              <a href="tel:+1234567890">+1 234 567 890</a>
+            </li>
             <li>
               <FaEnvelope className="footer-icon" />
               <a href="mailto:your.email@example.com">your.email@example.com</a>
             </li>
-            <li>
-              <FaPhoneAlt className="footer-icon" />
-              <a href="tel:+1234567890">+1 234 567 890</a>
-            </li>
+            
             <li>
               <FaMapMarkerAlt className="footer-icon" />
               <span>1234 Secret Lane, Cryptoville</span>
