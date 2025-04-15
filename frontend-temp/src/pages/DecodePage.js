@@ -1,18 +1,23 @@
-// pages/DecodePage.js
 import { useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
+import { FiUploadCloud, FiLock, FiUnlock, FiCopy } from 'react-icons/fi';
+import '../App.css';
 
 const DecodePage = () => {
   const [file, setFile] = useState(null);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: 'image/*',
+    accept: {'image/*': ['.png', '.jpg', '.jpeg']},
     maxFiles: 1,
-    onDrop: acceptedFiles => setFile(acceptedFiles[0])
+    onDrop: acceptedFiles => {
+      setFile(acceptedFiles[0]);
+      setError('');
+    }
   });
 
   const handleSubmit = async () => {
@@ -28,55 +33,94 @@ const DecodePage = () => {
     try {
       const response = await axios.post('http://localhost:3001/decode', formData);
       setMessage(response.data.message);
+      setSuccess(true);
       setError('');
     } catch (err) {
-      setError('Error decoding image. Please try again.');
+      setError(err.response?.data?.error || 'Error decoding image. Please try again.');
+      setSuccess(false);
     } finally {
       setLoading(false);
     }
   };
 
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(message);
+  };
+
   return (
-    <div className="container">
-  <div className="result-card">
-    <h2>Decode Hidden Message</h2>
-    <div 
-      className="dropzone"
-      {...getRootProps()}
-    >
-      <input {...getInputProps()} />
-      {file ? (
-        <p>Selected file: {file.name}</p>
-      ) : isDragActive ? (
-        <p>Drop the image here...</p>
-      ) : (
-        <p>Drag stego image here</p>
-      )}
-    </div>
+    <div className="decode-container">
+      <div className="glass-card">
+        <h1 className="decode-title">
+          <FiUnlock className="title-icon" />
+          Reveal Hidden Secrets
+        </h1>
 
-    {error && <div className="error-message">{error}</div>}
+        <div 
+          {...getRootProps()}
+          className={`dropzone ${isDragActive ? 'active' : ''} ${success ? 'success' : ''}`}
+        >
+          <input {...getInputProps()} />
+          <div className="dropzone-content">
+            <FiUploadCloud className="upload-icon" />
+            {file ? (
+              <div className="file-preview">
+                <p className="file-name">{file.name}</p>
+                <span className="file-size">
+                  {(file.size / 1024).toFixed(1)} KB
+                </span>
+              </div>
+            ) : (
+              <p className="drop-text">
+                {isDragActive 
+                  ? 'Drop the stego image here' 
+                  : 'Drag & drop image, or click to select'}
+              </p>
+            )}
+          </div>
+        </div>
 
-    <button 
-      className="btn btn-primary"
-      onClick={handleSubmit}
-      disabled={loading}
-    >
-      {loading ? (
-        <div className="loading-spinner"></div>
-      ) : (
-        'Decode Message'
-      )}
-    </button>
+        <div className="action-section">
+          <button 
+            onClick={handleSubmit}
+            disabled={loading || !file}
+            className="decode-button"
+          >
+            {loading ? (
+              <div className="spinner"></div>
+            ) : (
+              <>
+                <FiLock className="button-icon" />
+                Decode Message
+              </>
+            )}
+          </button>
 
-    {message && (
-      <div className="decoded-message">
-        <h3>Hidden Message:</h3>
-        <p>{message}</p>
+          {error && (
+            <div className="error-message">
+              ⚠️ {error}
+            </div>
+          )}
+        </div>
+
+        {message && (
+          <div className="message-result">
+            <div className="message-header">
+              <h3>Decrypted Message</h3>
+              <button 
+                onClick={copyToClipboard}
+                className="copy-button"
+                title="Copy to clipboard"
+              >
+                <FiCopy />
+              </button>
+            </div>
+            <div className="message-content">
+              {message}
+            </div>
+          </div>
+        )}
       </div>
-    )}
-  </div>
-</div>
-
+    </div>
   );
 };
 
