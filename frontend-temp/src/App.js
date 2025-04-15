@@ -6,6 +6,7 @@ import HomePage from './pages/HomePage';
 import Navbar from './pages/Navbar';
 import Footer from './pages/Footer';
 import About from './pages/About';
+import LoginSignUp from './pages/LoginSignUp';
 import './App.css';
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
           <Route path="/encode" element={<EncodePage />} />
           <Route path="/decode" element={<DecodePage />} />
           <Route path="/about" element={<About/>} />
+          <Route path="/login" element={<LoginSignUp/>} />
         </Routes>
       </div>
       <Footer />
