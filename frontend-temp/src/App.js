@@ -5,6 +5,7 @@ import DecodePage from './pages/DecodePage';
 import HomePage from './pages/HomePage';
 import Navbar from './pages/Navbar';
 import Footer from './pages/Footer';
+import About from './pages/About';
 import './App.css';
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/encode" element={<EncodePage />} />
           <Route path="/decode" element={<DecodePage />} />
+          <Route path="/about" element={<About/>} />
         </Routes>
       </div>
       <Footer />
