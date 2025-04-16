@@ -5,6 +5,10 @@ const cors = require('cors');
 const { PythonShell } = require('python-shell');
 const path = require('path');
 const fs = require('fs');
+const jwt = require('jsonwebtoken');
+const pool = require('./db');
+const { hashPassword, comparePassword, authenticateToken } = require('./auth');
+require('dotenv').config();
 
 const app = express();
 const port = 3001;
@@ -32,8 +36,78 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// API endpoint to encode image
-app.post('/encode', upload.single('image'), (req, res) => {
+// Authentication endpoints
+app.post('/api/signup', async (req, res) => {
+    try {
+        const { username, email, password } = req.body;
+
+        // Check if user already exists
+        const userExists = await pool.query(
+            'SELECT * FROM users WHERE email = $1 OR username = $2',
+            [email, username]
+        );
+
+        if (userExists.rows.length > 0) {
+            return res.status(400).json({ error: 'User already exists' });
+        }
+
+        // Hash password and create user
+        const hashedPassword = await hashPassword(password);
+        const newUser = await pool.query(
+            'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email',
+            [username, email, hashedPassword]
+        );
+
+        // Generate JWT token
+        const token = jwt.sign(
+            { id: newUser.rows[0].id, username: newUser.rows[0].username },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        res.json({ token, user: newUser.rows[0] });
+    } catch (err) {
+        console.error('Signup error:', err);
+        res.status(500).json({ error: 'Error creating user' });
+    }
+});
+
+app.post('/api/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        // Find user
+        const user = await pool.query(
+            'SELECT * FROM users WHERE email = $1',
+            [email]
+        );
+
+        if (user.rows.length === 0) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        // Verify password
+        const isValidPassword = await comparePassword(password, user.rows[0].password_hash);
+        if (!isValidPassword) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        // Generate JWT token
+        const token = jwt.sign(
+            { id: user.rows[0].id, username: user.rows[0].username },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        res.json({ token, user: { id: user.rows[0].id, username: user.rows[0].username, email: user.rows[0].email } });
+    } catch (err) {
+        console.error('Login error:', err);
+        res.status(500).json({ error: 'Error logging in' });
+    }
+});
+
+// Protect encode and decode routes
+app.post('/encode', authenticateToken, upload.single('image'), (req, res) => {
     if (!req.file || !req.body.message) {
         return res.status(400).json({ error: 'Image and message are required' });
     }
@@ -72,8 +146,7 @@ app.post('/encode', upload.single('image'), (req, res) => {
     });
 });
 
-// API endpoint to decode image
-app.post('/decode', upload.single('image'), (req, res) => {
+app.post('/decode', authenticateToken, upload.single('image'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'Image is required' });
     }
