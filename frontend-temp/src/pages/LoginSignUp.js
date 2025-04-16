@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import '../App.css';
 
 const formVariants = {
@@ -13,6 +15,49 @@ const formVariants = {
 
 const LoginSignup = () => {
     const [isSignup, setIsSignup] = useState(false);
+    const [formData, setFormData] = useState({
+        username: '',
+        email: '',
+        password: '',
+        confirmPassword: ''
+    });
+    const [error, setError] = useState('');
+    const navigate = useNavigate();
+
+    const handleChange = (e) => {
+        setFormData({
+            ...formData,
+            [e.target.name]: e.target.value
+        });
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+
+        if (isSignup && formData.password !== formData.confirmPassword) {
+            setError('Passwords do not match');
+            return;
+        }
+
+        try {
+            const endpoint = isSignup ? '/api/signup' : '/api/login';
+            const response = await axios.post(`http://localhost:3001${endpoint}`, {
+                username: formData.username,
+                email: formData.email,
+                password: formData.password
+            });
+
+            // Store token and user info
+            localStorage.setItem('token', response.data.token);
+            localStorage.setItem('user', JSON.stringify(response.data.user));
+
+            // Redirect to home page
+            navigate('/');
+        } catch (err) {
+            setError(err.response?.data?.error || 'An error occurred');
+        }
+    };
 
     return (
         <div className="auth-page">
@@ -38,18 +83,22 @@ const LoginSignup = () => {
                 }}
             >
                 <h2>{isSignup ? 'Sign Up' : 'Login'}</h2>
-                <form>
+                {error && <div className="auth-error">{error}</div>}
+                <form onSubmit={handleSubmit}>
                     {isSignup && (
                         <motion.div
                             className="auth-form-group"
                             custom={0}
                             variants={formVariants}
                         >
-                            <label className="auth-label">Name</label>
+                            <label className="auth-label">Username</label>
                             <input
                                 className="auth-input"
                                 type="text"
-                                placeholder="Your Name"
+                                name="username"
+                                value={formData.username}
+                                onChange={handleChange}
+                                placeholder="Your Username"
                                 required
                             />
                         </motion.div>
@@ -64,6 +113,9 @@ const LoginSignup = () => {
                         <input
                             className="auth-input"
                             type="email"
+                            name="email"
+                            value={formData.email}
+                            onChange={handleChange}
                             placeholder="you@example.com"
                             required
                         />
@@ -78,6 +130,9 @@ const LoginSignup = () => {
                         <input
                             className="auth-input"
                             type="password"
+                            name="password"
+                            value={formData.password}
+                            onChange={handleChange}
                             placeholder="Password"
                             required
                         />
@@ -93,6 +148,9 @@ const LoginSignup = () => {
                             <input
                                 className="auth-input"
                                 type="password"
+                                name="confirmPassword"
+                                value={formData.confirmPassword}
+                                onChange={handleChange}
                                 placeholder="Confirm Password"
                                 required
                             />
