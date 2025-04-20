@@ -1,93 +1,122 @@
-from PIL import Image
-import numpy as np
 import sys
-import hashlib
-import base64
+import os
+import binascii
+from PIL import Image
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import unpad
+from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Hash import SHA256
+import numpy as np
+import base64
+
+if len(sys.argv) != 6:
+    print("Usage: decode_stego.py <image> <secret_key> <salt_hex> <iv_hex> <auth_tag_hex>", file=sys.stderr)
+    sys.exit(1)
 
 def binary_to_text(binary_str):
-    chars = [binary_str[i:i+8] for i in range(0, len(binary_str), 8)]
-    return ''.join([chr(int(char, 2)) for char in chars])
-
-def decrypt_message(encrypted_message, key):
+    """Convert a binary string to readable text."""
     try:
-        # Decode the base64 message
-        decoded = base64.b64decode(encrypted_message)
-        # Extract IV and encrypted data
-        iv = decoded[:16]
-        encrypted = decoded[16:]
-        # Create cipher object
-        cipher = AES.new(key, AES.MODE_CBC, iv)
-        # Decrypt the message
-        decrypted = unpad(cipher.decrypt(encrypted), AES.block_size)
-        return decrypted.decode()
+        # Split binary string into 8-bit chunks
+        chars = [binary_str[i:i+8] for i in range(0, len(binary_str), 8)]
+        # Convert each chunk to a character
+        text = ''.join([chr(int(char, 2)) for char in chars])
+        return text
     except Exception as e:
-        print(f"Decryption error: {str(e)}")
-        raise ValueError("Invalid secret key or corrupted message")
+        print(f"Error in binary_to_text: {str(e)}", file=sys.stderr)
+        raise
 
-def decode_image(image_path, secret_key, salt):
+def extract_encrypted_data(image_path):
+    """Extract encrypted data hidden in the least significant bits of image pixels."""
     try:
-        # Validate inputs
-        if not secret_key or len(secret_key) < 8:
-            print("Error: Secret key must be at least 8 characters")
-            return None
-            
-        if not salt:
-            print("Error: Salt is required")
-            return None
-
-        # Derive key from secret key and salt
-        try:
-            key = hashlib.pbkdf2_hmac('sha256', secret_key.encode(), bytes.fromhex(salt), 100000, 32)
-        except Exception as e:
-            print(f"Key derivation error: {str(e)}")
-            return None
-        
+        # Open and convert image to RGB
         img = Image.open(image_path)
         img = img.convert("RGB")
-        pixels = np.array(img)
-
+        pixels = np.array(img, dtype=np.uint8)
+        
+        print(f"Image size: {pixels.shape[0]}x{pixels.shape[1]}", file=sys.stderr)
+        
         binary_message = ""
-        end_marker = "1111111111111110"
-
+        end_marker = "1111111111111110"  # Consistent end marker
+        max_bits = pixels.shape[0] * pixels.shape[1] * 3  # Maximum bits that can be stored
+        
+        # Extract LSB from each RGB component
         for i in range(pixels.shape[0]):
             for j in range(pixels.shape[1]):
-                for k in range(3):  # R, G, B
+                for k in range(3):  # R, G, B channels
                     lsb = str(pixels[i, j, k] & 1)
                     binary_message += lsb
-
+                    
+                    # Check for end marker
                     if binary_message.endswith(end_marker):
-                        # Remove the end marker before decoding
                         binary_message = binary_message[:-len(end_marker)]
-                        encrypted_text = binary_to_text(binary_message)
-                        try:
-                            decrypted_text = decrypt_message(encrypted_text, key)
-                            print(decrypted_text)
-                            return decrypted_text
-                        except ValueError as e:
-                            print(f"Error: {str(e)}")
-                            return None
-
-        print("Error: End marker not found in image")
-        return None
+                        print(f"Extracted binary message (length: {len(binary_message)}): {binary_message[:100]}...", file=sys.stderr)
+                        text = binary_to_text(binary_message)
+                        print(f"Extracted text: {text}", file=sys.stderr)
+                        return text
+                    
+                    # Check if we've exceeded image capacity
+                    if len(binary_message) > max_bits:
+                        raise ValueError("End marker not found within image capacity")
+        
+        raise ValueError("End marker not found in image")
     except Exception as e:
-        print(f"Error during decoding: {str(e)}")
-        return None
+        print(f"Error extracting data: {str(e)}", file=sys.stderr)
+        raise
+
+
+def decode_image(image_path, secret_key, salt_hex, iv_hex, auth_tag_hex):
+    """Decode and decrypt the hidden message from the image."""
+    try:
+        # Validate hex string lengths
+        print(f"Parameter lengths - Salt: {len(salt_hex)} | IV: {len(iv_hex)} | AuthTag: {len(auth_tag_hex)}", file=sys.stderr)
+        if len(salt_hex) != 32:
+            raise ValueError(f"Invalid salt length: {len(salt_hex)} (expected 32)")
+        if len(iv_hex) != 24:
+            raise ValueError(f"Invalid IV length: {len(iv_hex)} (expected 24)")
+        if len(auth_tag_hex) != 32:
+            raise ValueError(f"Invalid auth tag length: {len(auth_tag_hex)} (expected 32)")
+        
+        # Convert hex strings to bytes with proper error handling
+        try:
+            salt = bytes.fromhex(salt_hex)
+            iv = bytes.fromhex(iv_hex)
+            auth_tag = bytes.fromhex(auth_tag_hex)
+        except ValueError as e:
+            raise ValueError(f"Invalid hex string: {str(e)}")
+        
+        # Verify IV length (must be 12 bytes for AES-GCM)
+        if len(iv) != 12:
+            raise ValueError(f"Invalid IV length: {len(iv)} bytes (expected 12)")
+        
+        # Derive key using explicit SHA-256
+        key = PBKDF2(secret_key, salt, dkLen=32, count=100000, hmac_hash_module=SHA256)
+        
+        # Extract and decode the encrypted data
+        encrypted_data = extract_encrypted_data(image_path)
+        print(f"Extracted encrypted data: {encrypted_data}", file=sys.stderr)
+        ciphertext = base64.b64decode(encrypted_data)
+        print(f"Base64 decoded ciphertext (hex): {ciphertext.hex()}", file=sys.stderr)
+        print(f"Extracted ciphertext length: {len(ciphertext)} bytes", file=sys.stderr)
+        
+        # Verify ciphertext length
+        if len(ciphertext) == 0:
+            raise ValueError("Empty ciphertext extracted from image")
+        
+        cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
+        plaintext = cipher.decrypt_and_verify(ciphertext, auth_tag)
+        print(plaintext.decode())
+        return True
+    except Exception as e:
+        print(f"DECODE_ERROR: {str(e)}", file=sys.stderr)
+        return False
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print("Usage: python decode_stego.py <encoded_image> <secret_key> <salt>")
-        sys.exit(1)
-    
-    encoded_image = sys.argv[1]
+    # Get command-line arguments
+    image_path = os.path.abspath(sys.argv[1].replace('\\', '/'))
     secret_key = sys.argv[2]
-    salt = sys.argv[3]
+    salt_hex = sys.argv[3]
+    iv_hex = sys.argv[4]
+    auth_tag_hex = sys.argv[5]
     
-    try:
-        result = decode_image(encoded_image, secret_key, salt)
-        if result is None:
-            sys.exit(1)
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        sys.exit(1)
+    # Run decoding process and exit with appropriate status
+    success = decode_image(image_path, secret_key, salt_hex, iv_hex, auth_tag_hex)
+    sys.exit(0 if success else 1)

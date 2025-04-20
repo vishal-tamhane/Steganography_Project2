@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const pool = require('./db');
 const { hashPassword, comparePassword, authenticateToken } = require('./auth');
+const sharp = require('sharp');
 require('dotenv').config();
 
 const app = express();
@@ -124,104 +125,212 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// Protect encode and decode routes
-app.post('/encode', authenticateToken, upload.single('image'), (req, res) => {
-    if (!req.file || !req.body.message || !req.body.secretKey) {
-        return res.status(400).json({ error: 'Image, message, and secret key are required' });
+// Helper function to run Python scripts with proper error handling
+const runPythonScript = (script, options) => new Promise((resolve, reject) => {
+    const pyshell = new PythonShell(script, options);
+    let output = [];
+    let error = null;
+
+    pyshell.on('message', (msg) => {
+        console.log('Python output:', msg); // Debug: Log Python output
+        output.push(msg);
+    });
+    pyshell.on('stderr', (stderr) => {
+        console.error('Python stderr:', stderr);
+        if (stderr.includes('DECRYPT_ERROR')) {
+            error = new Error('Invalid secret key');
+        } else if (stderr.includes('ENCODE_ERROR')) {
+            error = new Error(stderr.split('ENCODE_ERROR:')[1].trim());
+        } else if (stderr.includes('ERROR:')) {
+            error = new Error(stderr.split('ERROR:')[1].trim());
+        } else {
+            error = new Error(stderr);
+        }
+    });
+    pyshell.on('error', (err) => {
+        console.error('Python error:', err);
+        error = err;
+    });
+
+    pyshell.end((err) => {
+        if (err || error) {
+            reject(err || error);
+        } else {
+            resolve(output);
+        }
+    });
+});
+// Helper function to extract cryptographic parameters from image
+const extractFromImage = async (imagePath) => {
+    const metadata = await sharp(imagePath).metadata();
+    const textChunks = metadata.text || {};
+    
+    if (!textChunks.salt || !textChunks.iv || !textChunks.authTag) {
+        throw new Error('Missing crypto parameters in metadata');
     }
-
-    if (req.body.secretKey.length < 8) {
-        return res.status(400).json({ error: 'Secret key must be at least 8 characters' });
-    }
-
-    const outputPath = path.join(uploadsDir, `encoded_${Date.now()}.png`);
-    const { key, salt } = deriveKey(req.body.secretKey);
-
-    const options = {
-        mode: 'text',
-        pythonOptions: ['-u'],
-        scriptPath: __dirname,
-        args: [
-            req.file.path,
-            req.body.message,
-            outputPath,
-            salt.toString('hex')
-        ]
+    
+    return {
+        salt: textChunks.salt,
+        iv: textChunks.iv,
+        authTag: textChunks.authTag
     };
+};
 
-    PythonShell.run('steg.py', options, (err, results) => {
-        if (err) {
-            console.error('Error running steg.py:', err);
-            return res.status(500).json({ error: 'Error encoding image' });
+// ========== ENCODE ENDPOINT ==========
+app.post('/encode', authenticateToken, upload.single('image'), async (req, res) => {
+    let sanitizedImagePath;
+    let outputPath;
+    try {
+        if (!req.file || !req.body.message || !req.body.secretKey) {
+            return res.status(400).json({ error: 'Image, message, and secret key are required' });
         }
 
-        res.download(outputPath, 'encoded_image.png', (err) => {
+        if (req.body.secretKey.length < 8) {
+            return res.status(400).json({ error: 'Secret key must be at least 8 characters' });
+        }
+
+        // Validate image format
+        const inputMetadata = await sharp(req.file.path).metadata();
+        if (inputMetadata.format !== 'png') {
+            throw new Error('Input image must be a PNG');
+        }
+
+        // Normalize and sanitize file paths
+        sanitizedImagePath = path.normalize(req.file.path).replace(/\\/g, '/');
+        outputPath = path.join(uploadsDir, `encoded_${Date.now()}.png`);
+        const normalizedOutputPath = outputPath.replace(/\\/g, '/');
+
+        // Generate crypto parameters
+        const { key, salt } = deriveKey(req.body.secretKey);
+        const iv = crypto.randomBytes(12); // 12 bytes for AES-GCM
+        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+
+        // Encrypt
+        let encrypted = cipher.update(req.body.message, 'utf8', 'hex');
+        encrypted += cipher.final('hex');
+        const authTag = cipher.getAuthTag().toString('hex');
+
+        // Log parameter lengths for verification
+        console.log('Crypto parameter lengths:', {
+            salt: salt.toString('hex').length, // Should be 32 (16 bytes)
+            iv: iv.toString('hex').length,     // Should be 24 (12 bytes)
+            authTag: authTag.length            // Should be 32 (16 bytes)
+        });
+
+        // Run encoding script with plaintext message and secret key
+        const options = {
+            mode: 'text',
+            pythonOptions: ['-u'],
+            scriptPath: __dirname,
+            args: [
+                sanitizedImagePath,
+                req.body.message,
+                normalizedOutputPath,
+                req.body.secretKey
+            ]
+        };
+
+        console.log('Running steg.py with args:', options.args);
+        await runPythonScript('steg.py', options);
+
+        // Verify metadata using Python script
+        const metadataOptions = {
+            mode: 'text',
+            pythonOptions: ['-u'],
+            scriptPath: __dirname,
+            args: [normalizedOutputPath]
+        };
+        const metadataOutput = await runPythonScript('read_metadata.py', metadataOptions);
+        const metadata = JSON.parse(metadataOutput[0]);
+        console.log('Metadata from Pillow:', metadata);
+        if (!metadata.salt || !metadata.iv || !metadata.authTag) {
+            throw new Error('Failed to embed cryptographic parameters in image');
+        }
+        
+        res.download(normalizedOutputPath, 'encoded_image.png', async (err) => {
             if (err) {
                 console.error('Error sending file:', err);
             }
-            // Clean up files
-            try {
-                fs.unlinkSync(req.file.path);
-                fs.unlinkSync(outputPath);
-            } catch (e) {
-                console.error('Error cleaning up files:', e);
-            }
+            await safeDelete(sanitizedImagePath);
+            await safeDelete(normalizedOutputPath);
         });
-    });
-});
-
-app.post('/decode', decodeLimiter, authenticateToken, upload.single('image'), (req, res) => {
-    if (!req.file || !req.body.secretKey) {
-        return res.status(400).json({ error: 'Image and secret key are required' });
+    } catch (err) {
+        console.error('Server error:', err);
+        if (!res.headersSent) {
+            res.status(500).json({ error: err.message });
+        }
+        if (sanitizedImagePath) await safeDelete(sanitizedImagePath);
+        if (outputPath) await safeDelete(outputPath);
     }
-
-    // Generate a new salt for key derivation
-    const { key, salt } = deriveKey(req.body.secretKey);
-
-    const options = {
-        mode: 'text',
-        pythonOptions: ['-u'],
-        scriptPath: __dirname,
-        args: [
-            req.file.path,
-            req.body.secretKey,
-            salt.toString('hex')  // Pass the salt in hex format
-        ]
-    };
-
-    PythonShell.run('decode_stego.py', options, (err, results) => {
-        if (err) {
-            console.error('Error running decode_stego.py:', err);
-            // Check if the error is due to invalid key
-            if (err.message.includes('Invalid secret key')) {
-                return res.status(401).json({ error: 'Invalid secret key' });
-            }
-            return res.status(500).json({ error: 'Error decoding image' });
-        }
-
-        try {
-            if (!results || results.length === 0) {
-                return res.status(401).json({ error: 'Invalid secret key' });
-            }
-
-            const decodedMessage = results[0];
-            if (!decodedMessage) {
-                return res.status(401).json({ error: 'Invalid secret key' });
-            }
-
-            // Clean up file
-            try {
-                fs.unlinkSync(req.file.path);
-            } catch (e) {
-                console.error('Error cleaning up file:', e);
-            }
-
-            res.json({ message: decodedMessage });
-        } catch (e) {
-            res.status(401).json({ error: 'Invalid secret key' });
-        }
-    });
 });
+
+
+// Add this near other helper functions
+const safeDelete = async (path) => {
+    if (fs.existsSync(path)) {
+        try {
+            await fs.promises.unlink(path);
+        } catch (e) {
+            console.error('Error cleaning up file:', e);
+        }
+    }
+};
+
+app.post('/decode', decodeLimiter, authenticateToken, upload.single('image'), async (req, res) => {
+    let sanitizedImagePath;
+    try {
+        if (!req.file || !req.body.secretKey) {
+            return res.status(400).json({ error: 'Image and secret key are required' });
+        }
+
+        sanitizedImagePath = path.normalize(req.file.path).replace(/\\/g, '/');
+
+        // Extract metadata using Python script
+        const metadataOptions = {
+            mode: 'text',
+            pythonOptions: ['-u'],
+            scriptPath: __dirname,
+            args: [sanitizedImagePath]
+        };
+    
+
+        const metadataOutput = await runPythonScript('read_metadata.py', metadataOptions);
+        const textChunks = JSON.parse(metadataOutput[0]);
+        
+        if (!textChunks.salt || !textChunks.iv || !textChunks.authTag) {
+            throw new Error('Missing crypto parameters in metadata');
+        }
+
+        console.log('Decode metadata:', textChunks);
+        console.log('Decoding this file:', sanitizedImagePath);
+
+        const options = {
+            mode: 'text',
+            pythonOptions: ['-u'],
+            scriptPath: __dirname,
+            args: [
+                sanitizedImagePath,
+                req.body.secretKey,
+                textChunks.salt,
+                textChunks.iv,
+                textChunks.authTag
+            ]
+        };
+
+        const results = await runPythonScript('decode_stego.py', options);
+        res.json({ message: results[0] });
+    } catch (err) {
+        console.error('Server error:', err);
+        if (!res.headersSent) {
+            const status = err.message.includes('Invalid secret key') ? 401 : 500;
+            res.status(status).json({ error: err.message });
+        }
+    } finally {
+        await safeDelete(sanitizedImagePath);
+    }
+});
+
+
 
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
