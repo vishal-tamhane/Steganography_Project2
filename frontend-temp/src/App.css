@@ -503,10 +503,8 @@ body {
 /*...................About.js................... */
 .about-container {
   max-width: 950px;
-  /* margin-top: 90px; */
-  margin: 2.5rem auto 3rem auto;
-  margin-top: 100px;
-  padding: 2.5rem 1.5rem 3rem 1.5rem;
+  margin: 7rem auto 3rem auto;
+  padding: 0 1.5rem;
   background: rgba(255,255,255,0.10);
   border-radius: 1.5rem;
   box-shadow: 0 8px 32px rgba(31,38,135,0.10);
@@ -522,7 +520,8 @@ body {
   color: #00bcd4;
   font-size: 2.3rem;
   font-weight: 800;
-  margin-bottom: 1rem;
+  margin-bottom: 4rem;
+  padding-top: 30px;
 }
 
 .about-highlight {
@@ -1276,5 +1275,14 @@ body {
   border-radius: 8px;
   margin-top: 1rem;
   text-align: center;
+}
+
+@media (max-width: 700px) {
+  .hero-section h1 {
+    font-size: 2.1rem;
+  }
+  .features-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
