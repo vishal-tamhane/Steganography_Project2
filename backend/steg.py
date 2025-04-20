@@ -1,68 +1,86 @@
-from PIL import Image
-import numpy as np
-import sys
-import hashlib
-import base64
+from PIL import Image, PngImagePlugin
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
 from Crypto.Random import get_random_bytes
+from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Hash import SHA256
+import sys
+import binascii
+import numpy as np
+import base64
+
+if len(sys.argv) != 5:
+    print("Usage: steg.py <input> <message> <output> <secret_key>", file=sys.stderr)
+    sys.exit(1)
 
 def text_to_binary(text):
-    return ''.join(format(ord(char), '08b') for char in text)
+    binary = ''.join(format(ord(char), '08b') for char in text)
+    return binary + "1111111111111110"
 
 def encrypt_message(message, key):
-    # Generate a random IV
-    iv = get_random_bytes(16)
-    # Create cipher object
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    # Encrypt the message
-    encrypted = cipher.encrypt(pad(message.encode(), AES.block_size))
-    # Return IV + encrypted message
-    return base64.b64encode(iv + encrypted).decode()
+    try:
+        salt = get_random_bytes(16)
+        iv = get_random_bytes(12)
+        derived_key = PBKDF2(key, salt, 32, 100000, hmac_hash_module=SHA256)
+        cipher = AES.new(derived_key, AES.MODE_GCM, nonce=iv)
+        ciphertext, auth_tag = cipher.encrypt_and_digest(message.encode())
+        encrypted_data = base64.b64encode(ciphertext).decode()
+        return encrypted_data, salt.hex(), iv.hex(), auth_tag.hex()
+    except Exception as e:
+        print(f"Error in encrypt_message: {str(e)}", file=sys.stderr)
+        raise
 
-def encode_image(image_path, secret_message, output_path, salt):
-    # Derive key from secret key and salt
-    key = hashlib.pbkdf2_hmac('sha256', secret_message.encode(), salt.encode(), 100000, 32)
-    
-    # Encrypt the message
-    encrypted_message = encrypt_message(secret_message, key)
-    
-    # Convert encrypted message to binary
-    binary_message = text_to_binary(encrypted_message) + '1111111111111110'  # End marker
-    
-    img = Image.open(image_path)
-    img = img.convert("RGB")  # Ensure it's in RGB mode
-    pixels = np.array(img)
-    
-    binary_index = 0
-    total_pixels = pixels.shape[0] * pixels.shape[1] * 3  # RGB channels
-    
-    if len(binary_message) > total_pixels:
-        raise ValueError("Message too large to hide in this image.")
+def encode_lsb(image_path, binary_message, output_path, pnginfo=None):
+    try:
+        img = Image.open(image_path)
+        img = img.convert("RGB")
+        pixels = np.array(img, dtype=np.uint8)
+        
+        max_capacity = pixels.shape[0] * pixels.shape[1] * 3
+        if len(binary_message) > max_capacity:
+            raise ValueError(f"Message too large for image: {len(binary_message)} bits > {max_capacity} capacity")
+        
+        print(f"Image size: {pixels.shape[0]}x{pixels.shape[1]}, Capacity: {max_capacity} bits")
+        print(f"Encoding binary message (length: {len(binary_message)}): {binary_message[:100]}...")
+        
+        index = 0
+        for i in range(pixels.shape[0]):
+            for j in range(pixels.shape[1]):
+                for k in range(3):
+                    if index < len(binary_message):
+                        pixels[i, j, k] = (pixels[i, j, k] & 0xFE) | int(binary_message[index])
+                        index += 1
+        
+        encoded_img = Image.fromarray(pixels, mode="RGB")
+        print(f"Saving image to {output_path} with metadata: {pnginfo.chunks if pnginfo else None}")
+        encoded_img.save(output_path, "PNG", pnginfo=pnginfo, compress_level=0)
+        
+        saved_img = Image.open(output_path)
+        saved_info = saved_img.info
+        print(f"Metadata in saved image: {saved_info}")
+    except Exception as e:
+        print(f"Error in encode_lsb: {str(e)}", file=sys.stderr)
+        raise
 
-    for i in range(pixels.shape[0]):
-        for j in range(pixels.shape[1]):
-            for k in range(3):  # Iterate over R, G, B
-                if binary_index < len(binary_message):
-                    pixels[i, j, k] = (pixels[i, j, k] & 0xFE) | int(binary_message[binary_index])
-                    binary_index += 1
-
-    encoded_img = Image.fromarray(pixels)
-    encoded_img.save(output_path)
-    print(f"Message encoded and saved as {output_path}")
+def encode_image(input_path, message, output_path, secret_key):
+    try:
+        print(f"Input message: {message}")
+        encrypted_data, salt_hex, iv_hex, auth_tag_hex = encrypt_message(message, secret_key)
+        print(f"Encrypted data: {encrypted_data}, salt: {salt_hex}, iv: {iv_hex}, authTag: {auth_tag_hex}")
+        
+        binary_message = text_to_binary(encrypted_data)
+        
+        pnginfo = PngImagePlugin.PngInfo()
+        pnginfo.add_itxt("salt", salt_hex, lang="en", tkey="salt")
+        pnginfo.add_itxt("iv", iv_hex, lang="en", tkey="iv")
+        pnginfo.add_itxt("authTag", auth_tag_hex, lang="en", tkey="authTag")
+        print(f"Created PNG iTXt metadata: salt={salt_hex}, iv={iv_hex}, authTag={auth_tag_hex}")
+        
+        encode_lsb(input_path, binary_message, output_path, pnginfo)
+        return True
+    except Exception as e:
+        print(f"ENCODE_ERROR: {str(e)}", file=sys.stderr)
+        return False
 
 if __name__ == "__main__":
-    if len(sys.argv) != 5:
-        print("Usage: python steg.py <input_image> <message> <output_image> <salt>")
-        sys.exit(1)
-    
-    input_image = sys.argv[1]
-    message = sys.argv[2]
-    output_image = sys.argv[3]
-    salt = sys.argv[4]
-    
-    try:
-        encode_image(input_image, message, output_image, salt)
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        sys.exit(1)
+    success = encode_image(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
+    sys.exit(0 if success else 1)
