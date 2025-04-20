@@ -1,58 +1,90 @@
 // pages/EncodePage.js
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import axios from 'axios';
-import { FiUploadCloud, FiLock, FiImage } from 'react-icons/fi';
+import { useAuth } from '../context/AuthContext';
 import '../App.css';
 
 const EncodePage = () => {
+  const { user } = useAuth();
   const [file, setFile] = useState(null);
   const [message, setMessage] = useState('');
+  const [secretKey, setSecretKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState('');
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: {'image/*': ['.png', '.jpg', '.jpeg']},
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg']
+    },
     maxFiles: 1,
     onDrop: acceptedFiles => {
       setFile(acceptedFiles[0]);
       setError('');
-      setSuccess(false);
     }
   });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file || !message) {
-      setError('Please select an image and enter a message');
-      setSuccess(false);
+    if (!user) {
+      setError('Please login to encode messages');
+      return;
+    }
+
+    if (!file) {
+      setError('Please select an image');
+      return;
+    }
+
+    if (!message.trim()) {
+      setError('Please enter a message');
+      return;
+    }
+
+    if (secretKey.length < 8) {
+      setError('Secret key must be at least 8 characters');
       return;
     }
 
     setLoading(true);
+    setError('');
+    setSuccess('');
+
     const formData = new FormData();
     formData.append('image', file);
     formData.append('message', message);
+    formData.append('secretKey', secretKey);
 
     try {
-      const response = await axios.post('http://localhost:3001/encode', formData, {
-        responseType: 'blob'
+      const response = await fetch('http://localhost:3001/encode', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: formData
       });
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'encoded_image.png');
-      document.body.appendChild(link);
-      link.click();
-      setError('');
-      setSuccess(true);
-      setMessage('');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Encoding failed');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'encoded_image.png';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setSuccess('Message encoded successfully!');
       setFile(null);
+      setMessage('');
+      setSecretKey('');
     } catch (err) {
-      setError('Error encoding image. Please try again.');
-      setSuccess(false);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -61,66 +93,78 @@ const EncodePage = () => {
   return (
     <div className="encode-container">
       <div className="glass-card">
-        <h1 className="encode-title">
-          <FiLock className="title-icon" />
-          Hide Your Secret Message
-        </h1>
-
+        <h2 className="encode-title">Encode Message</h2>
         <form onSubmit={handleSubmit}>
           <div
             {...getRootProps()}
-            className={`dropzone ${isDragActive ? 'active' : ''} ${success ? 'success' : ''}`}
+            className={`dropzone ${isDragActive ? 'active' : ''} ${file ? 'success' : ''}`}
           >
             <input {...getInputProps()} />
             <div className="dropzone-content">
-              <FiUploadCloud className="upload-icon" />
               {file ? (
                 <div className="file-preview">
-                  <FiImage className="file-img-icon" />
+                  <i className="file-img-icon">📷</i>
                   <p className="file-name">{file.name}</p>
-                  <span className="file-size">
-                    {(file.size / 1024).toFixed(1)} KB
-                  </span>
+                  <p className="file-size">{(file.size / 1024).toFixed(2)} KB</p>
                 </div>
               ) : (
-                <p className="drop-text">
-                  {isDragActive
-                    ? 'Drop the image here...'
-                    : 'Drag & drop image, or click to select'}
-                </p>
+                <>
+                  <i className="upload-icon">📁</i>
+                  <p className="drop-text">
+                    {isDragActive
+                      ? 'Drop the image here'
+                      : 'Drag & drop an image here, or click to select'}
+                  </p>
+                </>
               )}
             </div>
           </div>
 
-          <textarea
-            className="message-input"
-            placeholder="Enter your secret message..."
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            maxLength={1000}
-          />
+          <div className="message-input-container">
+            <label htmlFor="message">Message to Encode:</label>
+            <textarea
+              id="message"
+              className="message-input"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Enter your secret message here..."
+              required
+            />
+          </div>
 
-          {error && <div className="error-message">⚠️ {error}</div>}
-          {success && (
-            <div className="success-message">
-              🎉 Encoded image downloaded successfully!
-            </div>
-          )}
+          <div className="secret-key-container">
+            <label htmlFor="secretKey">Secret Key (min 8 characters):</label>
+            <input
+              id="secretKey"
+              type="password"
+              className="secret-key-input"
+              value={secretKey}
+              onChange={(e) => setSecretKey(e.target.value)}
+              minLength="8"
+              required
+            />
+            {secretKey.length > 0 && secretKey.length < 8 && (
+              <span className="error-message">Key must be at least 8 characters</span>
+            )}
+          </div>
 
           <button
-            className="encode-button"
             type="submit"
-            disabled={loading}
+            className="encode-button"
+            disabled={loading || !file || !message.trim() || secretKey.length < 8}
           >
             {loading ? (
-              <div className="spinner"></div>
-            ) : (
               <>
-                <FiLock className="button-icon" />
-                Encode Message
+                <span className="spinner"></span>
+                Encoding...
               </>
+            ) : (
+              'Encode Message'
             )}
           </button>
+
+          {error && <div className="error-message">{error}</div>}
+          {success && <div className="success-message">{success}</div>}
         </form>
       </div>
     </div>
