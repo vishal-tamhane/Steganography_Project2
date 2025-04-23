@@ -53,7 +53,17 @@ const storage = multer.diskStorage({
     }
 });
 
-const upload = multer({ storage: storage });
+// Update multer configuration to handle the 'image' field
+const upload = multer({ 
+    storage: storage,
+    fileFilter: (req, file, cb) => {
+        // Accept only images
+        if (!file.mimetype.startsWith('image/')) {
+            return cb(new Error('Only image files are allowed!'), false);
+        }
+        cb(null, true);
+    }
+});
 
 // Authentication endpoints
 app.post('/api/signup', async (req, res) => {
@@ -160,26 +170,135 @@ const runPythonScript = (script, options) => new Promise((resolve, reject) => {
         }
     });
 });
-// Helper function to extract cryptographic parameters from image
+
+// Helper function to extract metadata from image
 const extractFromImage = async (imagePath) => {
-    const metadata = await sharp(imagePath).metadata();
-    const textChunks = metadata.text || {};
-    
-    if (!textChunks.salt || !textChunks.iv || !textChunks.authTag) {
-        throw new Error('Missing crypto parameters in metadata');
+    try {
+        console.log('\n=== Starting Metadata Extraction ===');
+        console.log(`Extracting from: ${imagePath}`);
+        
+        // First verify the image exists and is readable
+        try {
+            await fs.promises.access(imagePath, fs.constants.R_OK);
+        } catch (err) {
+            throw new Error(`Image file not accessible: ${err.message}`);
+        }
+        
+        // Get image metadata
+        const metadata = await sharp(imagePath).metadata();
+        console.log('\n=== Image Metadata ===');
+        console.log('Format:', metadata.format);
+        console.log('Size:', metadata.size);
+        console.log('Width:', metadata.width);
+        console.log('Height:', metadata.height);
+        
+        // Log all available metadata for debugging
+        console.log('\n=== All Available Metadata ===');
+        console.log('Raw metadata:', metadata);
+        
+        // Create a map to store extracted metadata
+        const metadataMap = {};
+        
+        // Extract metadata from comments if available
+        if (metadata.comments && Array.isArray(metadata.comments)) {
+            console.log('\n=== Processing Comments ===');
+            metadata.comments.forEach(comment => {
+                if (comment.keyword && comment.text) {
+                    console.log(`Found comment: ${comment.keyword} = ${comment.text}`);
+                    metadataMap[comment.keyword] = comment.text;
+                }
+            });
+        }
+        
+        // Also check text metadata
+        if (metadata.text) {
+            console.log('\n=== Processing Text Metadata ===');
+            Object.entries(metadata.text).forEach(([key, value]) => {
+                console.log(`Found text: ${key} = ${value}`);
+                metadataMap[key] = value;
+            });
+        }
+        
+        // Log the processed metadata map
+        console.log('\n=== Processed Metadata Map ===');
+        console.log(metadataMap);
+        
+        // Check for presence of all required metadata
+        console.log('\n=== Checking Required Metadata ===');
+        const salt = metadataMap['salt'];
+        const iv = metadataMap['iv'];
+        const authTag = metadataMap['authTag'];
+        
+        if (!salt) {
+            throw new Error('Missing salt in metadata');
+        }
+        if (!iv) {
+            throw new Error('Missing IV in metadata');
+        }
+        if (!authTag) {
+            throw new Error('Missing auth tag in metadata');
+        }
+        
+        const extracted = {
+            salt: salt,
+            iv: iv,
+            authTag: authTag
+        };
+        
+        console.log('\n=== Extracted Metadata ===');
+        console.log('Processed metadata:', extracted);
+        
+        // Verify metadata lengths
+        const saltLength = extracted.salt.length;
+        const ivLength = extracted.iv.length;
+        const authTagLength = extracted.authTag.length;
+        
+        console.log('\n=== Metadata Lengths ===');
+        console.log('Salt length:', saltLength);
+        console.log('IV length:', ivLength);
+        console.log('Auth tag length:', authTagLength);
+        
+        // Validate lengths
+        if (saltLength !== 32) {
+            throw new Error(`Invalid salt length: ${saltLength} (expected 32)`);
+        }
+        if (ivLength !== 24) {
+            throw new Error(`Invalid IV length: ${ivLength} (expected 24)`);
+        }
+        if (authTagLength !== 32) {
+            throw new Error(`Invalid auth tag length: ${authTagLength} (expected 32)`);
+        }
+        
+        // Validate hex format
+        const hexRegex = /^[0-9a-fA-F]+$/;
+        console.log('\n=== Validating Hex Format ===');
+        
+        if (!hexRegex.test(extracted.salt)) {
+            throw new Error('Invalid salt format: not a valid hex string');
+        }
+        if (!hexRegex.test(extracted.iv)) {
+            throw new Error('Invalid IV format: not a valid hex string');
+        }
+        if (!hexRegex.test(extracted.authTag)) {
+            throw new Error('Invalid auth tag format: not a valid hex string');
+        }
+        
+        console.log('All metadata validation passed');
+        console.log('\n=== Extraction Complete ===');
+        
+        return extracted;
+    } catch (err) {
+        console.error('\n=== Extraction Error ===');
+        console.error('Error details:', err);
+        throw err;
     }
-    
-    return {
-        salt: textChunks.salt,
-        iv: textChunks.iv,
-        authTag: textChunks.authTag
-    };
 };
 
 // ========== ENCODE ENDPOINT ==========
 app.post('/encode', authenticateToken, upload.single('image'), async (req, res) => {
     let sanitizedImagePath;
     let outputPath;
+    let tempOutputPath;
     try {
         if (!req.file || !req.body.message || !req.body.secretKey) {
             return res.status(400).json({ error: 'Image, message, and secret key are required' });
@@ -198,7 +317,9 @@ app.post('/encode', authenticateToken, upload.single('image'), async (req, res) 
         // Normalize and sanitize file paths
         sanitizedImagePath = path.normalize(req.file.path).replace(/\\/g, '/');
         outputPath = path.join(uploadsDir, `encoded_${Date.now()}.png`);
+        tempOutputPath = outputPath + '.tmp';
         const normalizedOutputPath = outputPath.replace(/\\/g, '/');
+        const normalizedTempPath = tempOutputPath.replace(/\\/g, '/');
 
         // Generate crypto parameters
         const { key, salt } = deriveKey(req.body.secretKey);
@@ -217,35 +338,30 @@ app.post('/encode', authenticateToken, upload.single('image'), async (req, res) 
             authTag: authTag.length            // Should be 32 (16 bytes)
         });
 
-        // Run encoding script with plaintext message and secret key
+        // Run encoding script with encrypted message and crypto parameters
         const options = {
             mode: 'text',
             pythonOptions: ['-u'],
             scriptPath: __dirname,
             args: [
                 sanitizedImagePath,
-                req.body.message,
-                normalizedOutputPath,
-                req.body.secretKey
+                encrypted,
+                normalizedTempPath,  // Use temp path for atomic operation
+                salt.toString('hex'),
+                iv.toString('hex'),
+                authTag
             ]
         };
 
         console.log('Running steg.py with args:', options.args);
         await runPythonScript('steg.py', options);
 
-        // Verify metadata using Python script
-        const metadataOptions = {
-            mode: 'text',
-            pythonOptions: ['-u'],
-            scriptPath: __dirname,
-            args: [normalizedOutputPath]
-        };
-        const metadataOutput = await runPythonScript('read_metadata.py', metadataOptions);
-        const metadata = JSON.parse(metadataOutput[0]);
-        console.log('Metadata from Pillow:', metadata);
-        if (!metadata.salt || !metadata.iv || !metadata.authTag) {
-            throw new Error('Failed to embed cryptographic parameters in image');
-        }
+        // Verify the encoded image
+        const metadata = await extractFromImage(normalizedTempPath);
+        console.log('Verified metadata:', metadata);
+
+        // Atomic rename
+        await fs.promises.rename(normalizedTempPath, normalizedOutputPath);
         
         res.download(normalizedOutputPath, 'encoded_image.png', async (err) => {
             if (err) {
@@ -261,9 +377,9 @@ app.post('/encode', authenticateToken, upload.single('image'), async (req, res) 
         }
         if (sanitizedImagePath) await safeDelete(sanitizedImagePath);
         if (outputPath) await safeDelete(outputPath);
+        if (tempOutputPath) await safeDelete(tempOutputPath);
     }
 });
-
 
 // Add this near other helper functions
 const safeDelete = async (path) => {
@@ -276,62 +392,42 @@ const safeDelete = async (path) => {
     }
 };
 
-app.post('/decode', decodeLimiter, authenticateToken, upload.single('image'), async (req, res) => {
-    let sanitizedImagePath;
+app.post('/decode', authenticateToken, upload.single('image'), async (req, res) => {
+    let uploadedFilePath;
     try {
-        if (!req.file || !req.body.secretKey) {
-            return res.status(400).json({ error: 'Image and secret key are required' });
+        if (!req.file) {
+            return res.status(400).json({ error: 'No image file uploaded' });
         }
+        uploadedFilePath = req.file.path;
 
-        sanitizedImagePath = path.normalize(req.file.path).replace(/\\/g, '/');
-
-        // Extract metadata using Python script
-        const metadataOptions = {
-            mode: 'text',
-            pythonOptions: ['-u'],
-            scriptPath: __dirname,
-            args: [sanitizedImagePath]
-        };
-    
-
-        const metadataOutput = await runPythonScript('read_metadata.py', metadataOptions);
-        const textChunks = JSON.parse(metadataOutput[0]);
-        
-        if (!textChunks.salt || !textChunks.iv || !textChunks.authTag) {
-            throw new Error('Missing crypto parameters in metadata');
-        }
-
-        console.log('Decode metadata:', textChunks);
-        console.log('Decoding this file:', sanitizedImagePath);
-
+        // Use PythonShell instead of exec for better error handling
         const options = {
             mode: 'text',
             pythonOptions: ['-u'],
             scriptPath: __dirname,
-            args: [
-                sanitizedImagePath,
-                req.body.secretKey,
-                textChunks.salt,
-                textChunks.iv,
-                textChunks.authTag
-            ]
+            args: [uploadedFilePath, req.body.secretKey]
         };
 
-        const results = await runPythonScript('decode_stego.py', options);
-        res.json({ message: results[0] });
+        const output = await runPythonScript('decode_Steg0.py', options);
+        
+        // The last line of output should be the decoded message
+        const decodedMessage = output[output.length - 1];
+        
+        res.json({ message: decodedMessage });
     } catch (err) {
         console.error('Server error:', err);
         if (!res.headersSent) {
-            const status = err.message.includes('Invalid secret key') ? 401 : 500;
-            res.status(status).json({ error: err.message });
+            res.status(500).json({ error: err.message });
         }
     } finally {
-        await safeDelete(sanitizedImagePath);
+        // Clean up the uploaded file
+        if (uploadedFilePath) {
+            await safeDelete(uploadedFilePath);
+        }
     }
 });
-
-
 
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
 }); 
+
