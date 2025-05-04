@@ -444,7 +444,6 @@ body {
 
 .nav-link:hover {
   color: #00bcd4;
-  color: #000000;
 }
 
 .logout-btn {
@@ -468,7 +467,6 @@ body {
   background: none;
   border: none;
   color: #fff;
-  font-size: 1.5rem;
   cursor: pointer;
   padding: 0.5rem;
   position: relative;
