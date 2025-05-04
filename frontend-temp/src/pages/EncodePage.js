@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useAuth } from '../context/AuthContext';
+import { motion } from 'framer-motion';
+import { FaImage, FaLock, FaSpinner, FaCheck, FaExclamationTriangle } from 'react-icons/fa';
 import '../App.css';
 
 const EncodePage = () => {
@@ -91,25 +93,41 @@ const EncodePage = () => {
   };
 
   return (
-    <div className="encode-container">
-      <div className="glass-card">
+    <motion.div 
+      className="encode-container"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.8 }}
+    >
+      <motion.div 
+        className="glass-card"
+        whileHover={{ scale: 1.02 }}
+        transition={{ duration: 0.3 }}
+      >
         <h2 className="encode-title">Encode Message</h2>
         <form onSubmit={handleSubmit}>
-          <div
+          <motion.div
             {...getRootProps()}
             className={`dropzone ${isDragActive ? 'active' : ''} ${file ? 'success' : ''}`}
+            whileHover={{ scale: 1.02 }}
+            transition={{ duration: 0.3 }}
           >
             <input {...getInputProps()} />
             <div className="dropzone-content">
               {file ? (
-                <div className="file-preview">
-                  <i className="file-img-icon">📷</i>
+                <motion.div 
+                  className="file-preview"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <FaImage className="file-img-icon" size={40} />
                   <p className="file-name">{file.name}</p>
                   <p className="file-size">{(file.size / 1024).toFixed(2)} KB</p>
-                </div>
+                </motion.div>
               ) : (
                 <>
-                  <i className="upload-icon">📁</i>
+                  <FaImage className="upload-icon" size={40} />
                   <p className="drop-text">
                     {isDragActive
                       ? 'Drop the image here'
@@ -118,9 +136,14 @@ const EncodePage = () => {
                 </>
               )}
             </div>
-          </div>
+          </motion.div>
 
-          <div className="message-input-container">
+          <motion.div 
+            className="message-input-container"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+          >
             <label htmlFor="message">Message to Encode:</label>
             <textarea
               id="message"
@@ -130,44 +153,79 @@ const EncodePage = () => {
               placeholder="Enter your secret message here..."
               required
             />
-          </div>
+          </motion.div>
 
-          <div className="secret-key-container">
+          <motion.div 
+            className="secret-key-container"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.4 }}
+          >
             <label htmlFor="secretKey">Secret Key (min 8 characters):</label>
-            <input
-              id="secretKey"
-              type="password"
-              className="secret-key-input"
-              value={secretKey}
-              onChange={(e) => setSecretKey(e.target.value)}
-              minLength="8"
-              required
-            />
+            <div className="input-with-icon">
+              <FaLock className="input-icon" />
+              <input
+                id="secretKey"
+                type="password"
+                className="secret-key-input"
+                value={secretKey}
+                onChange={(e) => setSecretKey(e.target.value)}
+                minLength="8"
+                required
+              />
+            </div>
             {secretKey.length > 0 && secretKey.length < 8 && (
-              <span className="error-message">Key must be at least 8 characters</span>
+              <motion.span 
+                className="error-message"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+              >
+                <FaExclamationTriangle className="error-icon" />
+                Key must be at least 8 characters
+              </motion.span>
             )}
-          </div>
+          </motion.div>
 
-          <button
+          <motion.button
             type="submit"
             className="encode-button"
             disabled={loading || !file || !message.trim() || secretKey.length < 8}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
           >
             {loading ? (
               <>
-                <span className="spinner"></span>
+                <FaSpinner className="spinner" />
                 Encoding...
               </>
             ) : (
               'Encode Message'
             )}
-          </button>
+          </motion.button>
 
-          {error && <div className="error-message">{error}</div>}
-          {success && <div className="success-message">{success}</div>}
+          {error && (
+            <motion.div 
+              className="error-message"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <FaExclamationTriangle className="error-icon" />
+              {error}
+            </motion.div>
+          )}
+          {success && (
+            <motion.div 
+              className="success-message"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <FaCheck className="success-icon" />
+              {success}
+            </motion.div>
+          )}
         </form>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
