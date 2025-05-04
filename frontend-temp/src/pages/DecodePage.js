@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useAuth } from '../context/AuthContext';
+import { motion } from 'framer-motion';
+import { FaImage, FaKey, FaSpinner, FaCheck, FaExclamationTriangle, FaCopy } from 'react-icons/fa';
 import '../App.css';
 
 const DecodePage = () => {
@@ -76,25 +78,41 @@ const DecodePage = () => {
   };
 
   return (
-    <div className="decode-container">
-      <div className="glass-card">
+    <motion.div 
+      className="decode-container"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.8 }}
+    >
+      <motion.div 
+        className="glass-card"
+        whileHover={{ scale: 1.02 }}
+        transition={{ duration: 0.3 }}
+      >
         <h2 className="decode-title">Decode Message</h2>
         <form onSubmit={handleSubmit}>
-          <div
+          <motion.div
             {...getRootProps()}
             className={`dropzone ${isDragActive ? 'active' : ''} ${file ? 'success' : ''}`}
+            whileHover={{ scale: 1.02 }}
+            transition={{ duration: 0.3 }}
           >
             <input {...getInputProps()} />
             <div className="dropzone-content">
               {file ? (
-                <div className="file-preview">
-                  <i className="file-img-icon">📷</i>
+                <motion.div 
+                  className="file-preview"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <FaImage className="file-img-icon" size={40} />
                   <p className="file-name">{file.name}</p>
                   <p className="file-size">{(file.size / 1024).toFixed(2)} KB</p>
-                </div>
+                </motion.div>
               ) : (
                 <>
-                  <i className="upload-icon">📁</i>
+                  <FaImage className="upload-icon" size={40} />
                   <p className="drop-text">
                     {isDragActive
                       ? 'Drop the image here'
@@ -103,56 +121,82 @@ const DecodePage = () => {
                 </>
               )}
             </div>
-          </div>
+          </motion.div>
 
-          <div className="secret-key-container">
+          <motion.div 
+            className="secret-key-container"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+          >
             <label htmlFor="decryptionKey">Enter Secret Key:</label>
-            <input
-              id="decryptionKey"
-              type="password"
-              className="secret-key-input"
-              value={decryptionKey}
-              onChange={(e) => setDecryptionKey(e.target.value)}
-              required
-            />
-          </div>
+            <div className="input-with-icon">
+              <FaKey className="input-icon" />
+              <input
+                id="decryptionKey"
+                type="password"
+                className="secret-key-input"
+                value={decryptionKey}
+                onChange={(e) => setDecryptionKey(e.target.value)}
+                required
+              />
+            </div>
+          </motion.div>
 
-          <button
+          <motion.button
             type="submit"
             className="decode-button"
             disabled={loading || !file || !decryptionKey}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
           >
             {loading ? (
               <>
-                <span className="spinner"></span>
+                <FaSpinner className="spinner" />
                 Decoding...
               </>
             ) : (
               'Decode Message'
             )}
-          </button>
+          </motion.button>
 
-          {error && <div className="error-message">{error}</div>}
+          {error && (
+            <motion.div 
+              className="error-message"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <FaExclamationTriangle className="error-icon" />
+              {error}
+            </motion.div>
+          )}
 
           {decodedMessage && (
-            <div className="message-result">
+            <motion.div 
+              className="message-result"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+            >
               <div className="message-header">
                 <h3>Decoded Message</h3>
-                <button
+                <motion.button
                   type="button"
                   className="copy-button"
                   onClick={handleCopy}
                   title="Copy to clipboard"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
                 >
-                  📋
-                </button>
+                  <FaCopy />
+                </motion.button>
               </div>
               <div className="message-content">{decodedMessage}</div>
-            </div>
+            </motion.div>
           )}
         </form>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
