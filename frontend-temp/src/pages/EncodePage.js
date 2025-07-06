@@ -4,6 +4,7 @@ import { useDropzone } from 'react-dropzone';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 import { FaImage, FaLock, FaSpinner, FaCheck, FaExclamationTriangle } from 'react-icons/fa';
+import axios from 'axios';
 import '../App.css';
 
 const EncodePage = () => {
@@ -58,35 +59,31 @@ const EncodePage = () => {
     formData.append('secretKey', secretKey);
 
     try {
-      const response = await fetch('http://localhost:3001/encode', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Encoding failed');
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'encoded_image.png';
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      const res = await axios.post(
+        'http://localhost:3001/encode',
+        formData,
+        {
+          responseType: 'blob',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+        }
+      );
+      // Download the returned file
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'encoded_image.png');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
 
       setSuccess('Message encoded successfully!');
       setFile(null);
       setMessage('');
       setSecretKey('');
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || 'Encoding failed');
     } finally {
       setLoading(false);
     }

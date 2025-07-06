@@ -137,6 +137,9 @@ app.post('/api/login', async (req, res) => {
 
 // Helper function to run Python scripts with proper error handling
 const runPythonScript = (script, options) => new Promise((resolve, reject) => {
+    console.log(`Starting Python script: ${script}`);
+    console.log(`Script options:`, options);
+    
     const pyshell = new PythonShell(script, options);
     let output = [];
     let error = null;
@@ -163,9 +166,12 @@ const runPythonScript = (script, options) => new Promise((resolve, reject) => {
     });
 
     pyshell.end((err) => {
+        console.log(`Python script ${script} finished`);
         if (err || error) {
+            console.error(`Python script ${script} failed:`, err || error);
             reject(err || error);
         } else {
+            console.log(`Python script ${script} succeeded with output:`, output);
             resolve(output);
         }
     });
@@ -321,35 +327,17 @@ app.post('/encode', authenticateToken, upload.single('image'), async (req, res) 
         const normalizedOutputPath = outputPath.replace(/\\/g, '/');
         const normalizedTempPath = tempOutputPath.replace(/\\/g, '/');
 
-        // Generate crypto parameters
-        const { key, salt } = deriveKey(req.body.secretKey);
-        const iv = crypto.randomBytes(12); // 12 bytes for AES-GCM
-        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-
-        // Encrypt
-        let encrypted = cipher.update(req.body.message, 'utf8', 'hex');
-        encrypted += cipher.final('hex');
-        const authTag = cipher.getAuthTag().toString('hex');
-
-        // Log parameter lengths for verification
-        console.log('Crypto parameter lengths:', {
-            salt: salt.toString('hex').length, // Should be 32 (16 bytes)
-            iv: iv.toString('hex').length,     // Should be 24 (12 bytes)
-            authTag: authTag.length            // Should be 32 (16 bytes)
-        });
-
-        // Run encoding script with encrypted message and crypto parameters
+        // Run encoding script with original message and password
+        // The Python script will handle encryption internally
         const options = {
             mode: 'text',
             pythonOptions: ['-u'],
             scriptPath: __dirname,
             args: [
                 sanitizedImagePath,
-                encrypted,
                 normalizedTempPath,  // Use temp path for atomic operation
-                salt.toString('hex'),
-                iv.toString('hex'),
-                authTag
+                req.body.message,
+                req.body.secretKey
             ]
         };
 
@@ -398,6 +386,11 @@ app.post('/decode', authenticateToken, upload.single('image'), async (req, res) 
         if (!req.file) {
             return res.status(400).json({ error: 'No image file uploaded' });
         }
+        
+        if (!req.body.secretKey) {
+            return res.status(400).json({ error: 'Secret key is required' });
+        }
+        
         uploadedFilePath = req.file.path;
 
         // Use PythonShell instead of exec for better error handling
@@ -408,12 +401,25 @@ app.post('/decode', authenticateToken, upload.single('image'), async (req, res) 
             args: [uploadedFilePath, req.body.secretKey]
         };
 
+        console.log('Running decode_Steg0.py with args:', options.args);
         const output = await runPythonScript('decode_Steg0.py', options);
         
-        // The last line of output should be the decoded message
-        const decodedMessage = output[output.length - 1];
+        // The output should contain "Recovered message: [actual message]"
+        const outputText = output.join('\n');
+        console.log('Python decode output:', outputText);
         
-        res.json({ message: decodedMessage });
+        if (outputText.includes('Recovered message:')) {
+            const decodedMessage = outputText.split('Recovered message: ')[1].trim();
+            res.json({ message: decodedMessage });
+        } else {
+            // Check if there's an error in the output
+            if (outputText.includes('[ERROR]') || outputText.includes('Error:')) {
+                const errorMessage = outputText.split('Error:')[1] || outputText.split('[ERROR]')[1] || 'Unknown error';
+                res.status(400).json({ error: errorMessage.trim() });
+            } else {
+                res.status(500).json({ error: 'Failed to decode message' });
+            }
+        }
     } catch (err) {
         console.error('Server error:', err);
         if (!res.headersSent) {
