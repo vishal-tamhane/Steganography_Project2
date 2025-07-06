@@ -3,6 +3,7 @@ import { useDropzone } from 'react-dropzone';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 import { FaImage, FaKey, FaSpinner, FaCheck, FaExclamationTriangle, FaCopy } from 'react-icons/fa';
+import axios from 'axios';
 import '../App.css';
 
 const DecodePage = () => {
@@ -51,23 +52,19 @@ const DecodePage = () => {
     formData.append('secretKey', decryptionKey);
 
     try {
-      const response = await fetch('http://localhost:3001/decode', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: formData
-      });
+      const response = await axios.post(
+        'http://localhost:3001/decode',
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        }
+      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Decoding failed');
-      }
-
-      const data = await response.json();
-      setDecodedMessage(data.message);
+      setDecodedMessage(response.data.message);
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || 'Decoding failed');
     } finally {
       setLoading(false);
     }
