@@ -11,6 +11,8 @@ const rateLimit = require('express-rate-limit');
 const pool = require('./db');
 const { hashPassword, comparePassword, authenticateToken } = require('./auth');
 const sharp = require('sharp');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
 require('dotenv').config();
 
 const app = express();
@@ -27,6 +29,51 @@ const decodeLimiter = rateLimit({
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(passport.initialize());
+
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: '/auth/google/callback',
+}, async (accessToken, refreshToken, profile, done) => {
+    try {
+        // Find or create user in DB
+        const email = profile.emails[0].value;
+        const username = profile.displayName || email.split('@')[0];
+        let user = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        if (user.rows.length === 0) {
+            // Create new user (no password)
+            user = await pool.query(
+                'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING *',
+                [username, email, '']
+            );
+        }
+        return done(null, user.rows[0]);
+    } catch (err) {
+        return done(err, null);
+    }
+}));
+
+// Google Auth Route
+app.get('/auth/google',
+    passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+// Google Auth Callback
+app.get('/auth/google/callback',
+    passport.authenticate('google', { session: false, failureRedirect: '/login' }),
+    (req, res) => {
+        // Issue JWT
+        const user = req.user;
+        const token = jwt.sign(
+            { id: user.id, username: user.username },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+        // Redirect to frontend with token (e.g., as query param)
+        res.redirect(`http://localhost:3000/login?token=${token}&user=${encodeURIComponent(JSON.stringify({id: user.id, username: user.username, email: user.email}))}`);
+    }
+);
 
 // Key derivation function
 function deriveKey(password, salt = null) {

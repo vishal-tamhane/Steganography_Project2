@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import '../App.css';
+import { useAuth } from '../context/AuthContext';
+import { useEffect } from 'react';
 
 const formVariants = {
     hidden: { opacity: 0, y: -30 },
@@ -23,6 +25,18 @@ const LoginSignup = () => {
     });
     const [error, setError] = useState('');
     const navigate = useNavigate();
+    const { login } = useAuth();
+
+    // Handle Google OAuth redirect
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('token');
+        const user = params.get('user');
+        if (token && user) {
+            login(token, JSON.parse(user));
+            navigate('/');
+        }
+    }, [login, navigate]);
 
     const handleChange = (e) => {
         setFormData({
@@ -165,21 +179,49 @@ const LoginSignup = () => {
                         <button type="submit" className="auth-btn">
                             {isSignup ? 'Sign Up' : 'Login'}
                         </button>
-                        <div className="auth-toggle">
+                        <div className="auth-toggle" style={{ marginTop: '1.5rem', textAlign: 'center' }}>
                             {isSignup ? (
                                 <span>
                                     Already have an account?{' '}
-                                    <button onClick={() => setIsSignup(false)}>Login</button>
+                                    <button type="button" className="auth-toggle-btn" onClick={() => setIsSignup(false)}>
+                                        Login
+                                    </button>
                                 </span>
                             ) : (
                                 <span>
-                                    New here?{' '}
-                                    <button onClick={() => setIsSignup(true)}>Sign Up</button>
+                                    Don't have an account?{' '}
+                                    <button type="button" className="auth-toggle-btn" onClick={() => setIsSignup(true)}>
+                                        Sign Up
+                                    </button>
                                 </span>
                             )}
                         </div>
                     </motion.div>
                 </form>
+                {/* Google Login at the bottom */}
+                <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
+                    <button
+                        type="button"
+                        className="auth-btn"
+                        style={{ background: '#fff', color: '#222', border: '1px solid #ccc', borderRadius: '50%', width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}
+                        onClick={() => {
+                            window.location.href = 'http://localhost:3001/auth/google';
+                        }}
+                        aria-label="Sign in with Google"
+                    >
+                       <img 
+                            src="https://static.dezeen.com/uploads/2025/05/sq-google-g-logo-update_dezeen_2364_col_0-852x852.jpg" 
+                            alt="Google Logo" 
+                            width="32" 
+                            height="32" 
+                            style={{borderRadius: '4px'}} 
+                         />
+
+                    </button>
+                    <div style={{ fontSize: '0.95rem', color: '#555', marginTop: 8 }}>
+                        {isSignup ? 'Sign up with Google' : 'Login with Google'}
+                    </div>
+                </div>
             </motion.div>
         </div>
     );
