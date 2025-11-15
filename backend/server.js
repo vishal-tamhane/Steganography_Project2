@@ -34,7 +34,7 @@ app.use(passport.initialize());
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: '/auth/google/callback',
+    callbackURL: `${process.env.BACKEND_URL || 'http://localhost:3001'}/auth/google/callback`,
 }, async (accessToken, refreshToken, profile, done) => {
     try {
         // Find or create user in DB
@@ -70,8 +70,9 @@ app.get('/auth/google/callback',
             process.env.JWT_SECRET,
             { expiresIn: '24h' }
         );
-        // Redirect to frontend with token (e.g., as query param)
-        res.redirect(`http://localhost:3000/login?token=${token}&user=${encodeURIComponent(JSON.stringify({id: user.id, username: user.username, email: user.email}))}`);
+        // Redirect to frontend with token (use FRONTEND_URL env var)
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        res.redirect(`${frontendUrl}/login?token=${token}&user=${encodeURIComponent(JSON.stringify({id: user.id, username: user.username, email: user.email}))}`);
     }
 );
 
