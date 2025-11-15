@@ -29,16 +29,16 @@ const Footer = () => {
           <ul className="footer-contact-list">
           <li>
               <FaPhoneAlt className="footer-icon" />
-              <a href="tel:+1234567890">+1 234 567 890</a>
+              <a href="tel:9699842565">+91 9699842565</a>
             </li>
             <li>
               <FaEnvelope className="footer-icon" />
-              <a href="mailto:your.email@example.com">your.email@example.com</a>
+              <a href="mailto:your.email@example.com">vishaltamhane04@gmail.com</a>
             </li>
             
             <li>
               <FaMapMarkerAlt className="footer-icon" />
-              <span>1234 Secret Lane, Cryptoville</span>
+              <span>Pimpri-Chinchwad, Pune, India</span>
             </li>
           </ul>
         </div>
@@ -47,8 +47,8 @@ const Footer = () => {
         <div className="footer-section">
           <h3>Follow Us</h3>
           <div className="footer-socials">
-            <a href="https://github.com/yourprofile" target="_blank" rel="noopener noreferrer"><FaGithub /></a>
-            <a href="https://linkedin.com/in/yourprofile" target="_blank" rel="noopener noreferrer"><FaLinkedin /></a>
+            <a href="https://github.com/vishal-tamhane" target="_blank" rel="noopener noreferrer"><FaGithub /></a>
+            <a href="https://www.linkedin.com/in/vishal-tamhane/" target="_blank" rel="noopener noreferrer"><FaLinkedin /></a>
           </div>
         </div>
       </div>

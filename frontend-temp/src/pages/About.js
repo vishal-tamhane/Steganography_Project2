@@ -41,7 +41,7 @@ const About = () => {
         </div>
       </div>
 
-      <div className="about-section about-tech-section">
+      {/* <div className="about-section about-tech-section">
         <h2>Technology Stack</h2>
         <div className="about-tech-stack">
           <span><FaReact className="about-tech-icon" /> React</span>
@@ -51,32 +51,20 @@ const About = () => {
         <p>
           The frontend is built with React for a fast, responsive user experience. The backend uses Node.js and Python for robust API and steganography processing.
         </p>
-      </div>
+      </div> */}
 
-      <div className="about-section about-team-section">
-        <h2>Meet the Team</h2>
-        <div className="about-team">
-          <div className="about-team-member">
-            <img src="https://i.pravatar.cc/100?img=1" alt="Team Member" />
-            <div>
-              <strong>Vishal T.</strong>
-              <p>Lead Developer & Security Enthusiast</p>
-            </div>
-          </div>
-          {/* Add more team members as needed */}
-        </div>
-      </div>
+      
 
       <div className="about-section about-contact">
         <h2>Contact & Links</h2>
         <div className="about-contact-info">
           <p>
             <FaEnvelope className="about-contact-icon" />
-            Email: <a href="mailto:your.email@example.com">your.email@example.com</a>
+            Email: <a href="mailto:vishaltamhane04@gmail.com">vishaltamhane04@gmail.com</a>
           </p>
           <p>
             <FaGithub className="about-contact-icon" />
-            GitHub: <a href="https://github.com/yourprofile" target="_blank" rel="noopener noreferrer">github.com/yourprofile</a>
+            GitHub: <a href="https://github.com/vishal-tamhane" target="_blank" rel="noopener noreferrer">github.com/vishal-tamhane</a>
           </p>
         </div>
       </div>
