@@ -1,15 +1,29 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const pool = new Pool({
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    database: process.env.DB_NAME
-});
+// Prefer a single DATABASE_URL (e.g., Neon) but fall back to individual env vars
+const connectionString = process.env.DATABASE_URL ||
+    `postgres://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
 
-// Create users table if it doesn't exist
+// Reuse the pool across module reloads (helps with serverless environments and prevents connection exhaustion)
+if (!global.__pgPool) {
+    const poolConfig = {
+        connectionString,
+        max: 10,
+        idleTimeoutMillis: 30000,
+    };
+
+    // If using Neon/other managed Postgres over TLS, ensure SSL config is present
+    if (connectionString && connectionString.includes('neon')) {
+        poolConfig.ssl = { rejectUnauthorized: false };
+    }
+
+    global.__pgPool = new Pool(poolConfig);
+}
+
+const pool = global.__pgPool;
+
+// Create users table if it doesn't exist (keeps existing startup behavior)
 const createUsersTable = async () => {
     try {
         await pool.query(`
@@ -29,4 +43,4 @@ const createUsersTable = async () => {
 
 createUsersTable();
 
-module.exports = pool; 
+module.exports = pool;
