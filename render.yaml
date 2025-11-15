@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: steganography-backend
+    env: node
+    region: oregon
+    buildCommand: cd backend && chmod +x build.sh && ./build.sh
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
