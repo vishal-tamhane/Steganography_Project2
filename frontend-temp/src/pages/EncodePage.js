@@ -6,6 +6,8 @@ import { motion } from 'framer-motion';
 import { FaImage, FaLock, FaSpinner, FaCheck, FaExclamationTriangle } from 'react-icons/fa';
 import axios from 'axios';
 import '../App.css';
+// API base (use REACT_APP_API_URL in production)
+const API = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 const EncodePage = () => {
   const { user } = useAuth();
@@ -60,7 +62,7 @@ const EncodePage = () => {
 
     try {
       const res = await axios.post(
-        'http://localhost:3001/encode',
+        `${API}/encode`,
         formData,
         {
           responseType: 'blob',

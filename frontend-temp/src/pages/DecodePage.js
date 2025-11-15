@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
-import { FaImage, FaKey, FaSpinner, FaCheck, FaExclamationTriangle, FaCopy } from 'react-icons/fa';
+import { FaImage, FaKey, FaSpinner, FaExclamationTriangle, FaCopy } from 'react-icons/fa';
 import axios from 'axios';
 import '../App.css';
+// API base (use REACT_APP_API_URL in production)
+const API = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 const DecodePage = () => {
   const { user } = useAuth();
@@ -53,7 +55,7 @@ const DecodePage = () => {
 
     try {
       const response = await axios.post(
-        'http://localhost:3001/decode',
+        `${API}/decode`,
         formData,
         {
           headers: {

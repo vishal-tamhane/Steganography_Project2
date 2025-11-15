@@ -5,6 +5,8 @@ import axios from 'axios';
 import '../App.css';
 import { useAuth } from '../context/AuthContext';
 import { useEffect } from 'react';
+// API base (use REACT_APP_API_URL in production)
+const API = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 const formVariants = {
     hidden: { opacity: 0, y: -30 },
@@ -55,12 +57,12 @@ const LoginSignup = () => {
         }
 
         try {
-            const endpoint = isSignup ? '/api/signup' : '/api/login';
-            const response = await axios.post(`http://localhost:3001${endpoint}`, {
-                username: formData.username,
-                email: formData.email,
-                password: formData.password
-            });
+                const endpoint = isSignup ? '/api/signup' : '/api/login';
+                const response = await axios.post(`${API}${endpoint}`, {
+                    username: formData.username,
+                    email: formData.email,
+                    password: formData.password
+                });
 
             // Store token and user info
             localStorage.setItem('token', response.data.token);
@@ -204,8 +206,8 @@ const LoginSignup = () => {
                         type="button"
                         className="auth-btn"
                         style={{ background: '#fff', color: '#222', border: '1px solid #ccc', borderRadius: '50%', width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}
-                        onClick={() => {
-                            window.location.href = 'http://localhost:3001/auth/google';
+                            onClick={() => {
+                            window.location.href = `${API}/auth/google`;
                         }}
                         aria-label="Sign in with Google"
                     >
